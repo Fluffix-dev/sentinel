@@ -1,0 +1,6 @@
+name: Senitnel-Paper
+author: Fluffix.dev
+version: 1.0.0
+main: dev.fluffix.sentinel.plugin.SentinelPaper
+commands:
+  reasons:
