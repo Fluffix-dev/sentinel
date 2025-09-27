@@ -7,6 +7,7 @@ import dev.fluffix.sentinel.reasons.ReasonManager;
 import dev.fluffix.sentinel.reasons.ReasonType;
 import dev.fluffix.sentinel.message.MessageHandler;
 import dev.fluffix.sentinel.message.MessageKeys;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -36,7 +37,7 @@ public class ReasonsCommand implements CommandExecutor {
         }
 
         if (args.length == 0) {
-            player.sendMessage("§cVerwendung: /reasons <add|remove|list>");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("<red>Verwendung: /reasons <add|remove|list>")));
             return true;
         }
 
@@ -46,10 +47,10 @@ public class ReasonsCommand implements CommandExecutor {
                 case "add" -> handleAdd(player, args);
                 case "remove" -> handleRemove(player, args);
                 case "list" -> handleList(player, args);
-                default -> player.sendMessage("§cUnbekanntes Subcommand: " + sub);
+                default -> player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cUnbekanntes Subcommand: " + sub)));
             }
         } catch (SQLException e) {
-            player.sendMessage("§cMySQL-Fehler: " + e.getMessage());
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("<red>Es gibt wohl ein problem mit der MySQL verbindung <dark_gray>(" + e.getMessage() + "<dark_gray>)")));
             e.printStackTrace();
         }
         return true;
@@ -57,7 +58,7 @@ public class ReasonsCommand implements CommandExecutor {
 
     private void handleAdd(Player player, String[] args) throws SQLException {
         if (args.length < 4) {
-            player.sendMessage("§cVerwendung: /reasons add <Name> <Typ> <DauerSekunden>");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cVerwendung: /reasons add <Name> <Typ> <DauerSekunden>")));
             return;
         }
         String name = args[1];
@@ -65,19 +66,19 @@ public class ReasonsCommand implements CommandExecutor {
         try {
             type = ReasonType.valueOf(args[2].toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            player.sendMessage("§cUngültiger Typ. Erlaubt: BAN, MUTE, REPORT");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cUngültiger Typ. Erlaubt: BAN, MUTE, REPORT")));
             return;
         }
         long duration;
         try {
             duration = Long.parseLong(args[3]);
         } catch (NumberFormatException ex) {
-            player.sendMessage("§cDauer muss eine Zahl sein (Sekunden)");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cDauer muss eine Zahl sein (Sekunden)")));
             return;
         }
 
         if (reasonManager.exists(name, type)) {
-            player.sendMessage("§eEs existiert bereits ein Reason '" + name + "' vom Typ " + type);
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§eEs existiert bereits ein Reason '" + name + "' vom Typ " + type)));
             return;
         }
 
@@ -94,7 +95,7 @@ public class ReasonsCommand implements CommandExecutor {
 
     private void handleRemove(Player player, String[] args) throws SQLException {
         if (args.length < 3) {
-            player.sendMessage("§cVerwendung: /reasons remove <Name> <Typ>");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cVerwendung: /reasons remove <Name> <Typ>")));
             return;
         }
         String name = args[1];
@@ -102,12 +103,12 @@ public class ReasonsCommand implements CommandExecutor {
         try {
             type = ReasonType.valueOf(args[2].toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            player.sendMessage("§cUngültiger Typ. Erlaubt: BAN, MUTE, REPORT");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cUngültiger Typ. Erlaubt: BAN, MUTE, REPORT")));
             return;
         }
 
         if (!reasonManager.exists(name, type)) {
-            player.sendMessage("§eKein Reason '" + name + "' vom Typ " + type + " gefunden.");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§eKein Reason '" + name + "' vom Typ " + type + " gefunden.")));
             return;
         }
 
@@ -127,14 +128,14 @@ public class ReasonsCommand implements CommandExecutor {
             try {
                 filter = ReasonType.valueOf(args[1].toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException ex) {
-                player.sendMessage("§cUngültiger Typ für Filter. Erlaubt: BAN, MUTE, REPORT");
+                player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§cUngültiger Typ für Filter. Erlaubt: BAN, MUTE, REPORT")));
                 return;
             }
         }
 
         List<Reason> reasons = reasonManager.loadAll(filter);
         if (reasons.isEmpty()) {
-            player.sendMessage("§7Keine Reasons gefunden.");
+            player.sendMessage(messages.prefix().append(MiniMessage.miniMessage().deserialize("§7Keine Reasons gefunden.")));
             return;
         }
 
