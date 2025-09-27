@@ -15,7 +15,7 @@ public class UpdateChecker {
     private final HttpClient client;
 
     private final String owner = "Fluffix-dev";
-    private final String repo  = "HomeSystem";
+    private final String repo  = "sentinel";
     private final boolean includePrereleases = false;
 
     private final String currentVersion;

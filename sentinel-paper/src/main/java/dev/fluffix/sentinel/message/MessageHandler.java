@@ -63,10 +63,15 @@ public class MessageHandler {
         return cache.computeIfAbsent(k, ignored -> json.getString(k));
     }
 
-    /** Gibt den Prefix als Component (falls vorhanden, sonst leeres Component). */
+    /** Prefix als Component (falls vorhanden, sonst leeres Component). */
     public Component prefix() {
         String p = raw("prefix");
         return p == null ? Component.empty() : mm.deserialize(p);
+    }
+
+    /** Prefix als roher MiniMessage-String (z. B. für Logger). */
+    public String prefixRaw() {
+        return raw("prefix");
     }
 
     /** Baut eine Nachricht (ohne Prefix) als Component. */
@@ -117,11 +122,19 @@ public class MessageHandler {
         new JsonFileBuilder()
                 .add("prefix", "<gray>[<gradient:#00E5FF:#7C4DFF>Sentinel</gradient>]</gray>")
                 .add("no_permission", "<red>Du hast keine Berechtigung.</red>")
+
                 .add("reasons_added", "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> gespeichert. Dauer: <gold><duration></gold></green>")
                 .add("reasons_removed", "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> entfernt.</green>")
                 .add("reasons_header", "<aqua>--- Reasons<gray> [</gray><type><gray>]</gray> ---</aqua>")
                 .add("reasons_line", "<yellow><name></yellow> <gray>[</gray><type><gray>]</gray> <white><duration></white>")
+
                 .add("reload_done", "<green>Konfiguration neu geladen.</green>")
+
+                .add("ban_usage", "<gray>Verwendung:</gray> <white>/<label> <target> <reason1,reason2,...> [Notiz]</white>")
+                .add("ban_success", "<green><operator></green> hat <yellow><target></yellow> gebannt. Gründe: <gold><reasons></gold> <gray>(</gray><duration><gray>)</gray><#9aa><notice></#9aa>")
+                .add("ban_error", "<red>Konnte Ban nicht ausführen:</red> <white><error></white>")
+                .add("ban_sql_error", "<red>SQL-Fehler:</red> <white><error></white>")
+
                 .build(file.getAbsolutePath());
     }
 

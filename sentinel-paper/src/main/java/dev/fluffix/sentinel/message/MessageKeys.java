@@ -7,9 +7,14 @@ public enum MessageKeys {
     REASONS_REMOVED,
     REASONS_HEADER,
     REASONS_LINE,
-    RELOAD_DONE;
+    RELOAD_DONE,
+
+    BAN_USAGE,
+    BAN_SUCCESS,
+    BAN_ERROR,
+    BAN_SQL_ERROR;
 
     public String key() {
-        return name().toLowerCase(); // "prefix", "no_permission", ...
+        return name().toLowerCase();
     }
 }
