@@ -123,17 +123,23 @@ public class MessageHandler {
                 .add("prefix", "<gray>[<gradient:#00E5FF:#7C4DFF>Sentinel</gradient>]</gray>")
                 .add("no_permission", "<red>Du hast keine Berechtigung.</red>")
 
+                // Reasons
                 .add("reasons_added", "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> gespeichert. Dauer: <gold><duration></gold></green>")
                 .add("reasons_removed", "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> entfernt.</green>")
                 .add("reasons_header", "<aqua>--- Reasons<gray> [</gray><type><gray>]</gray> ---</aqua>")
                 .add("reasons_line", "<yellow><name></yellow> <gray>[</gray><type><gray>]</gray> <white><duration></white>")
 
+                // Reload
                 .add("reload_done", "<green>Konfiguration neu geladen.</green>")
 
+                // BanCommand
                 .add("ban_usage", "<gray>Verwendung:</gray> <white>/<label> <target> <reason1,reason2,...> [Notiz]</white>")
                 .add("ban_success", "<green><operator></green> hat <yellow><target></yellow> gebannt. Gründe: <gold><reasons></gold> <gray>(</gray><duration><gray>)</gray><#9aa><notice></#9aa>")
                 .add("ban_error", "<red>Konnte Ban nicht ausführen:</red> <white><error></white>")
                 .add("ban_sql_error", "<red>SQL-Fehler:</red> <white><error></white>")
+
+                // Kick-Nachricht beim Login-Bann
+                .add("ban_kick", "<red>Du bist vom Server gebannt.</red><newline><gray>Gründe:</gray> <gold><reasons></gold><newline><gray>Verbleibend:</gray> <white><duration></white><newline><gray>Von:</gray> <white><operator></white><newline><gray><notice></gray>")
 
                 .build(file.getAbsolutePath());
     }

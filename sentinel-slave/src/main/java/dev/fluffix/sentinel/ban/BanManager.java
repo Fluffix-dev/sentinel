@@ -133,9 +133,8 @@ public class BanManager {
         validateBanReasons(provided); // Sicherheit
         long max = 0;
         for (String name : provided) {
-            // hole den konkreten Reason (Name+Typ)
             Reason r = reasons.load(name, ReasonType.BAN);
-            if (r == null) continue; // sollte nicht passieren nach validate
+            if (r == null) continue; // sollte nach validate nicht vorkommen
             long d = r.getDurationSeconds();
             if (d == 0) return 0; // permanent
             if (d > max) max = d;
@@ -163,14 +162,12 @@ public class BanManager {
 
         validateBanReasons(ban.getReasons());
 
-        // Wenn Typ TEMP aber Reasons ergeben 0 → permanent erzwingen
         long remaining = ban.getRemainingSeconds();
         long auto = computeDurationFromReasonsSeconds(ban.getReasons());
         if (auto == 0) {
             ban.setType(BanType.PERMANENT);
             remaining = 0;
         } else if (ban.getType() != BanType.PERMANENT) {
-            // Falls manuelle Dauer kürzer als Auto: wir nehmen die längere (Policy)
             remaining = Math.max(Math.max(0, remaining), auto);
         } else {
             remaining = 0;
@@ -180,25 +177,38 @@ public class BanManager {
         String reasonsJson = reasonsToJson(ban.getReasons());
 
         final long remainingFinal = remaining;
-        db.inTransaction(con -> {
-            db.update(con, """
-                INSERT INTO sentinel_bans
-                  (uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active)
-                VALUES
-                  (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 1)
-            """,
-                    ban.getUniqueId().toString(),
-                    ban.getName(),
-                    ban.getOperator(),
-                    ban.getType().name(),
-                    reasonsJson,
-                    remainingFinal,
-                    ban.getNotice(),
-                    expiresAt == null ? null : java.sql.Timestamp.from(expiresAt)
-            );
 
-            List<Map<String, Object>> idRow = db.query("SELECT LAST_INSERT_ID() AS id", con);
+        db.inTransaction(con -> {
+            // INSERT mit Parametern
+            try {
+                db.update(con, """
+                    INSERT INTO sentinel_bans
+                      (uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active)
+                    VALUES
+                      (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 1)
+                """,
+                        ban.getUniqueId().toString(),
+                        ban.getName(),
+                        ban.getOperator(),
+                        ban.getType().name(),
+                        reasonsJson,
+                        remainingFinal,
+                        ban.getNotice(),
+                        (expiresAt == null ? null : java.sql.Timestamp.from(expiresAt))
+                );
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
+            // ID OHNE PARAMETER abfragen (wichtig: richtige Overload-Reihenfolge!)
+            List<Map<String, Object>> idRow = null;
+            try {
+                idRow = db.query(con, "SELECT LAST_INSERT_ID() AS id");
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
             Long id = ((Number) idRow.get(0).get("id")).longValue();
+
             ban.setId(id)
                     .setCreatedAt(Instant.now())
                     .setExpiresAt(expiresAt)

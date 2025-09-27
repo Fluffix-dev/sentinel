@@ -5,9 +5,8 @@ import dev.fluffix.sentinel.ban.BanManager;
 import dev.fluffix.sentinel.message.MessageHandler;
 import dev.fluffix.sentinel.message.MessageKeys;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
+import org.bukkit.Bukkit;
+import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 
 import java.sql.SQLException;
@@ -28,14 +27,13 @@ public class BanCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
 
         if (!(sender instanceof Player player)) {
-            // Wenn nur Spieler nutzen dürfen:
             sender.sendMessage("[Sentinel] Dieser Befehl ist nur für Spieler.");
             return true;
         }
 
         if (!player.hasPermission("sentinel.ban")) {
             messages.sendWithPrefix(player, MessageKeys.NO_PERMISSION.key());
-            return true; // WICHTIG: abbrechen
+            return true;
         }
 
         if (args.length < 2) {
@@ -56,9 +54,10 @@ public class BanCommand implements CommandExecutor {
         final String operator = player.getName();
 
         try {
-            // validiert Reasons (type=BAN), berechnet Dauer automatisch
+            // Ban (Auto-Dauer aus Reasons)
             Ban ban = banManager.banOfflineAuto(target, operator, reasonsList, notice);
 
+            // Erfolgsmeldung für den Ausführenden
             String reasonsJoined = String.join(", ", reasonsList);
             String durationPretty = (ban.getRemainingSeconds() == 0)
                     ? "permanent"
@@ -71,6 +70,29 @@ public class BanCommand implements CommandExecutor {
                     Placeholder.unparsed("reasons", reasonsJoined),
                     Placeholder.unparsed("duration", durationPretty),
                     Placeholder.unparsed("notice", notice));
+
+            // === NEU: Wenn Ziel online ist -> sofort kicken mit ban_kick ===
+            Player targetPlayer = null;
+            if (ban.getUniqueId() != null) {
+                targetPlayer = Bukkit.getPlayer(ban.getUniqueId());
+            }
+            if (targetPlayer == null) {
+                // Fallback über Namen
+                targetPlayer = Bukkit.getPlayerExact(ban.getName());
+            }
+
+            if (targetPlayer != null && targetPlayer.isOnline()) {
+                // Kick-Message rendern
+                var kickMsg = messages.render(
+                        MessageKeys.BAN_KICK.key(),
+                        Placeholder.unparsed("player", targetPlayer.getName()),
+                        Placeholder.unparsed("reasons", reasonsJoined),
+                        Placeholder.unparsed("duration", (ban.getRemainingSeconds() == 0) ? "permanent" : durationPretty),
+                        Placeholder.unparsed("operator", operator),
+                        Placeholder.unparsed("notice", notice == null ? "" : notice)
+                );
+                targetPlayer.kick(kickMsg);
+            }
 
         } catch (IllegalStateException | IllegalArgumentException ex) {
             messages.sendWithPrefix(player,

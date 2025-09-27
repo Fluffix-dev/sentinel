@@ -9,6 +9,8 @@ public enum MessageKeys {
     REASONS_LINE,
     RELOAD_DONE,
 
+    BAN_KICK,
+
     BAN_USAGE,
     BAN_SUCCESS,
     BAN_ERROR,

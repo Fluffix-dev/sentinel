@@ -5,6 +5,7 @@ import dev.fluffix.sentinel.commands.BanCommand;
 import dev.fluffix.sentinel.commands.ReasonsCommand;
 import dev.fluffix.sentinel.database.mysql.MySqlManager;
 import dev.fluffix.sentinel.github.UpdateChecker;
+import dev.fluffix.sentinel.listener.PlayerListener;
 import dev.fluffix.sentinel.logger.PluginLogger;
 import dev.fluffix.sentinel.message.MessageHandler;
 import dev.fluffix.sentinel.player.SentinelPlayerManager;
@@ -37,9 +38,9 @@ public class SentinelPaper extends JavaPlugin implements Listener {
     private BanManager banManager;
 
     private UpdateChecker updater;
-    private volatile boolean updateAvailable = false;
-    private volatile String latestVersion = null;
-    private volatile String downloadUrl = null;
+    public volatile boolean updateAvailable = false;
+    public volatile String latestVersion = null;
+    public volatile String downloadUrl = null;
 
     @Override
     public void onEnable() {
@@ -114,6 +115,8 @@ public class SentinelPaper extends JavaPlugin implements Listener {
         } else {
             getLogger().warning("Command 'ban' nicht in plugin.yml gefunden.");
         }
+
+        new PlayerListener();
     }
 
     @Override
@@ -150,30 +153,6 @@ public class SentinelPaper extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler
-    public void handleJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-
-        if (updateAvailable && (player.hasPermission("sentinel.setup") || player.hasPermission("*"))) {
-            String current = getDescription().getVersion();
-            String latest  = (latestVersion != null ? latestVersion : "unbekannt");
-            String url     = (downloadUrl != null ? downloadUrl : "—");
-
-            player.sendMessage(MiniMessage.miniMessage().deserialize(
-                    "<b><dark_gray>[</dark_gray>SENTINEL UPDATE<dark_gray>]</dark_gray></b> <green>" + latest));
-
-            player.sendMessage(MiniMessage.miniMessage().deserialize(
-                    "<gray>Deine Version: <green>" + current));
-
-            player.sendMessage(MiniMessage.miniMessage().deserialize(
-                    "<gray>Neue Version: <dark_green><b>" + latest + "</b></dark_green>"));
-
-            player.sendMessage(MiniMessage.miniMessage().deserialize("<gray>Download Url: ")
-                    .append(Component.text(url)
-                            .color(NamedTextColor.BLUE)
-                            .clickEvent(ClickEvent.openUrl(url))));
-        }
-    }
 
     public static SentinelPaper getInstance() {
         return instance;
@@ -197,5 +176,17 @@ public class SentinelPaper extends JavaPlugin implements Listener {
 
     public BanManager getBanManager() {
         return banManager;
+    }
+
+    public boolean isUpdateAvailable() {
+        return updateAvailable;
+    }
+
+    public String getLatestVersion() {
+        return latestVersion;
+    }
+
+    public String getDownloadUrl() {
+        return downloadUrl;
     }
 }
