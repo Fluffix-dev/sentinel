@@ -15,6 +15,7 @@ package dev.fluffix.sentinel.plugin;
 import dev.fluffix.sentinel.commands.ReasonsCommand;
 import dev.fluffix.sentinel.database.mysql.MySqlManager;
 import dev.fluffix.sentinel.logger.PluginLogger;
+import dev.fluffix.sentinel.message.MessageHandler;
 import dev.fluffix.sentinel.player.SentinelPlayerManager;
 import dev.fluffix.sentinel.reasons.ReasonManager;
 import org.bukkit.Bukkit;
@@ -33,6 +34,7 @@ public class SentinelPaper extends JavaPlugin {
     private MySqlManager mySqlManager;
     private SentinelPlayerManager sentinelPlayerManager;
     private ReasonManager reasonManager;
+    private MessageHandler messageHandler;
 
     @Override
     public void onEnable() {
@@ -68,7 +70,10 @@ public class SentinelPaper extends JavaPlugin {
         try {
             this.sentinelPlayerManager = new SentinelPlayerManager(mySqlManager);
             this.reasonManager = new ReasonManager(mySqlManager);
+            this.messageHandler = new MessageHandler(getDataFolder());
         } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
@@ -101,6 +106,10 @@ public class SentinelPaper extends JavaPlugin {
 
     public ReasonManager getReasonManager() {
         return reasonManager;
+    }
+
+    public MessageHandler getMessageHandler() {
+        return messageHandler;
     }
 
     public SentinelPlayerManager getSentinelPlayerManager() {
