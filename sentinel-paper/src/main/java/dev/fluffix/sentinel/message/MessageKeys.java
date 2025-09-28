@@ -14,6 +14,9 @@ public enum MessageKeys {
     BAN_LIST_HEADER,
     BAN_LIST_LINE,
     BAN_LIST_EMPTY,
+    UNBAN_USAGE,
+    UNBAN_SUCCESS,
+    UNBAN_NOT_FOUND,
 
     BAN_USAGE,
     BAN_SUCCESS,

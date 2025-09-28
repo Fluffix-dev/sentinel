@@ -5,3 +5,4 @@ main: dev.fluffix.sentinel.plugin.SentinelPaper
 commands:
   reasons:
   ban:
+  unban:

@@ -3,6 +3,7 @@ package dev.fluffix.sentinel.plugin;
 import dev.fluffix.sentinel.ban.BanManager;
 import dev.fluffix.sentinel.commands.BanCommand;
 import dev.fluffix.sentinel.commands.ReasonsCommand;
+import dev.fluffix.sentinel.commands.UnBanCommand;
 import dev.fluffix.sentinel.database.mysql.MySqlManager;
 import dev.fluffix.sentinel.github.UpdateChecker;
 import dev.fluffix.sentinel.listener.PlayerListener;
@@ -109,6 +110,13 @@ public class SentinelPaper extends JavaPlugin implements Listener {
             banCmd.setTabCompleter(new BanCommand(banManager,reasonManager,messageHandler));
         } else {
             PluginLogger.printWithLabel("SENTINEL","Fehler beim 'BAN' Command", "RED");
+        }
+
+        PluginCommand unBanCmd = getCommand("unban");
+        if (unBanCmd != null) {
+            unBanCmd.setExecutor(new UnBanCommand());
+        } else {
+            PluginLogger.printWithLabel("SENTINEL","Fehler beim 'UNBAN' Command", "RED");
         }
 
         // nach initialisierung von banManager (z.B. in onEnable)

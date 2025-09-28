@@ -137,6 +137,12 @@ public class MessageHandler {
                 // Kick beim Bann
                 .add(MessageKeys.BAN_KICK.key(), "<red>Du bist vom Server gebannt.</red><newline><gray>Gründe:</gray> <gold><reasons></gold><newline><gray>Verbleibend:</gray> <white><duration></white><newline><gray>Von:</gray> <white><operator></white><newline><gray><notice></gray>")
 
+
+                .add(MessageKeys.UNBAN_USAGE.key(), "<gray>Verwendung:</gray> <white>/unban <id|player></white>")
+                .add(MessageKeys.UNBAN_SUCCESS.key(), "<green>Der Spieler <yellow><target></yellow> wurde entbannt.</green>")
+                .add(MessageKeys.UNBAN_NOT_FOUND.key(), "<red>Es wurde kein aktiver Ban für <yellow><target></yellow> gefunden.</red>")
+
+
                 // Ban-Liste
                 .add(MessageKeys.BAN_LIST_USAGE.key(), "<gray>Verwendung:</gray> <white>/<label> list <target|all></white>")
                 .add(MessageKeys.BAN_LIST_HEADER.key(), "<aqua>— Bans für <yellow><target></yellow> —</aqua>")
