@@ -15,8 +15,9 @@ import java.util.*;
 
 /**
  * Persistenter Ban-Manager.
- * Nur Reasons erlaubt, die im ReasonManager mit Typ BAN existieren.
- * Unterstützt Auto-Dauer aus Reasons (max Dauer; 0 => permanent).
+ * - Nur Reasons erlaubt, die im ReasonManager mit Typ BAN existieren.
+ * - Auto-Dauer aus Reasons (max Dauer; 0 => permanent).
+ * - Inaktive/abgelaufene Bans werden in die Archiv-Tabelle verschoben.
  */
 public class BanManager {
 
@@ -36,6 +37,7 @@ public class BanManager {
     /* ---------------- Schema ---------------- */
 
     private void ensureSchema() throws SQLException {
+        // Live-Tabelle
         db.update("""
             CREATE TABLE IF NOT EXISTS sentinel_bans (
               id                BIGINT        NOT NULL AUTO_INCREMENT,
@@ -52,6 +54,27 @@ public class BanManager {
               PRIMARY KEY (id),
               INDEX idx_uuid_active (uuid, active),
               INDEX idx_expires_at (expires_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """);
+
+        // Archiv-Tabelle (gleiche Spalten + archived_at)
+        db.update("""
+            CREATE TABLE IF NOT EXISTS sentinel_bans_archive (
+              id                BIGINT        NOT NULL,
+              uuid              CHAR(36)      NOT NULL,
+              name              VARCHAR(64)   NOT NULL,
+              operator          VARCHAR(64)   NULL,
+              type              VARCHAR(16)   NOT NULL,
+              reasons           JSON          NOT NULL,
+              remaining_seconds BIGINT        NOT NULL DEFAULT 0,
+              notice            TEXT          NULL,
+              created_at        TIMESTAMP     NOT NULL,
+              expires_at        TIMESTAMP     NULL,
+              active            TINYINT(1)    NOT NULL,
+              archived_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              INDEX idx_arch_uuid (uuid),
+              INDEX idx_archived_at (archived_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """);
     }
@@ -179,7 +202,6 @@ public class BanManager {
         final long remainingFinal = remaining;
 
         db.inTransaction(con -> {
-            // INSERT mit Parametern
             try {
                 db.update(con, """
                     INSERT INTO sentinel_bans
@@ -200,7 +222,6 @@ public class BanManager {
                 throw new RuntimeException(e);
             }
 
-            // ID OHNE PARAMETER abfragen (wichtig: richtige Overload-Reihenfolge!)
             List<Map<String, Object>> idRow = null;
             try {
                 idRow = db.query(con, "SELECT LAST_INSERT_ID() AS id");
@@ -340,76 +361,209 @@ public class BanManager {
 
     public Ban getActive(UUID uuid) throws SQLException {
         List<Map<String, Object>> rows = db.query("""
-            SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
-            FROM sentinel_bans
-            WHERE uuid = ? AND active = 1
-            ORDER BY id DESC
-            LIMIT 1
-        """, uuid.toString());
-        return rows.isEmpty() ? null : mapRow(rows.get(0));
+        SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
+        FROM sentinel_bans
+        WHERE uuid = ? AND active = 1
+        ORDER BY id DESC
+        LIMIT 1
+    """, uuid.toString());
+
+        if (rows.isEmpty()) return null;
+
+        Map<String, Object> row = rows.get(0);
+
+        // Prüfe ob abgelaufen
+        Instant expiresAt = toInstant(row.get("expires_at"));
+        if (expiresAt != null && expiresAt.isBefore(Instant.now())) {
+            // Ban ist abgelaufen -> ins Archiv verschieben und aus Live löschen
+            long id = ((Number) row.get("id")).longValue();
+
+            db.inTransaction(con -> {
+                // INSERT INTO archive SELECT ... FROM sentinel_bans WHERE id = ?
+                try {
+                    db.update(con, """
+                    INSERT INTO sentinel_bans_archive
+                      (id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, archived_at)
+                    SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, CURRENT_TIMESTAMP
+                      FROM sentinel_bans
+                     WHERE id = ?
+                """, id);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+
+                // DELETE FROM sentinel_bans WHERE id = ?
+                try {
+                    db.update(con, "DELETE FROM sentinel_bans WHERE id = ?", id);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+                return null;
+            });
+
+            return null; // kein aktiver Ban mehr
+        }
+
+        return mapRow(row);
     }
 
+
+    /** listAll(true) -> nur aktive aus Live-Tabelle; listAll(false) -> Live + Archiv (UNION ALL) */
     public List<Ban> listAll(boolean onlyActive) throws SQLException {
         List<Map<String, Object>> rows = onlyActive
                 ? db.query("""
                     SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
-                    FROM sentinel_bans WHERE active = 1 ORDER BY created_at DESC
+                    FROM sentinel_bans WHERE active = 1
+                    ORDER BY created_at DESC
                   """)
                 : db.query("""
                     SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
-                    FROM sentinel_bans ORDER BY created_at DESC
+                      FROM sentinel_bans
+                    UNION ALL
+                    SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
+                      FROM sentinel_bans_archive
+                    ORDER BY created_at DESC
                   """);
         List<Ban> out = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) out.add(mapRow(r));
         return out;
     }
 
+    /** listFor(UUID) -> Einträge (Live + Archiv) für Spieler */
     public List<Ban> listFor(UUID uuid) throws SQLException {
         List<Map<String, Object>> rows = db.query("""
             SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
-            FROM sentinel_bans
-            WHERE uuid = ?
+              FROM sentinel_bans
+             WHERE uuid = ?
+            UNION ALL
+            SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active
+              FROM sentinel_bans_archive
+             WHERE uuid = ?
             ORDER BY created_at DESC
-        """, uuid.toString());
+        """, uuid.toString(), uuid.toString());
         List<Ban> out = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) out.add(mapRow(r));
         return out;
     }
 
+    /** Setzt Restzeit; wenn 0 -> archivieren. */
     public void setRemaining(long banId, long newRemainingSeconds) throws SQLException {
         long clamped = Math.max(0, newRemainingSeconds);
-        Instant newExpires = (clamped == 0) ? Instant.now() : Instant.now().plusSeconds(clamped);
-        db.update("""
-            UPDATE sentinel_bans
-               SET remaining_seconds = ?, expires_at = ?, active = (CASE WHEN ? > 0 THEN 1 ELSE 0 END)
-             WHERE id = ?
-        """,
-                clamped,
-                java.sql.Timestamp.from(newExpires),
-                clamped,
-                banId);
+        if (clamped > 0) {
+            Instant newExpires = Instant.now().plusSeconds(clamped);
+            db.update("""
+                UPDATE sentinel_bans
+                   SET remaining_seconds = ?, expires_at = ?, active = 1
+                 WHERE id = ?
+            """, clamped, java.sql.Timestamp.from(newExpires), banId);
+            return;
+        }
+
+        // clamped == 0 -> archivieren
+        db.inTransaction(con -> {
+            try {
+                db.update(con, """
+                    INSERT INTO sentinel_bans_archive
+                      (id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, archived_at)
+                    SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, CURRENT_TIMESTAMP
+                      FROM sentinel_bans
+                     WHERE id = ?
+                """, banId);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
+            try {
+                db.update(con, "DELETE FROM sentinel_bans WHERE id = ?", banId);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            return null;
+        });
     }
 
-    public void setNotice(long banId, String notice) throws SQLException {
-        db.update("UPDATE sentinel_bans SET notice = ? WHERE id = ?", notice, banId);
-    }
-
+    /** Unban: Eintrag ins Archiv verschieben und aus Live-Tabelle löschen. */
     public boolean unban(long banId) throws SQLException {
-        int affected = db.update("UPDATE sentinel_bans SET active = 0 WHERE id = ? AND active = 1", banId);
-        return affected > 0;
+        return db.inTransaction(con -> {
+            int inserted = 0;
+            try {
+                inserted = db.update(con, """
+                    INSERT INTO sentinel_bans_archive
+                      (id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, archived_at)
+                    SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, CURRENT_TIMESTAMP
+                      FROM sentinel_bans
+                     WHERE id = ? AND active = 1
+                """, banId);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
+            int deleted = 0;
+            try {
+                deleted = db.update(con, "DELETE FROM sentinel_bans WHERE id = ? AND active = 1", banId);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            return inserted > 0 && deleted > 0;
+        });
     }
 
+    /** Unban alle aktiven Bans eines Spielers → ins Archiv verschieben. */
     public int unbanAll(UUID uuid) throws SQLException {
-        return db.update("UPDATE sentinel_bans SET active = 0 WHERE uuid = ? AND active = 1", uuid.toString());
+        return db.inTransaction(con -> {
+            try {
+                int inserted = db.update(con, """
+                    INSERT INTO sentinel_bans_archive
+                      (id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, archived_at)
+                    SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, CURRENT_TIMESTAMP
+                      FROM sentinel_bans
+                     WHERE uuid = ? AND active = 1
+                """, uuid.toString());
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
+            int deleted = 0;
+            try {
+                deleted = db.update(con, "DELETE FROM sentinel_bans WHERE uuid = ? AND active = 1", uuid.toString());
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            // inserted und deleted sollten gleich sein; wir geben deleted zurück
+            return deleted;
+        });
     }
 
+    /** Verschiebt abgelaufene aktive Bans ins Archiv und entfernt sie aus der Live-Tabelle. */
     public int expireDueBans() throws SQLException {
-        return db.update("""
-            UPDATE sentinel_bans
-               SET active = 0
-             WHERE active = 1
-               AND expires_at IS NOT NULL
-               AND expires_at <= CURRENT_TIMESTAMP
-        """);
+        return db.inTransaction(con -> {
+            try {
+                int inserted = db.update(con, """
+                    INSERT INTO sentinel_bans_archive
+                      (id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, archived_at)
+                    SELECT id, uuid, name, operator, type, reasons, remaining_seconds, notice, created_at, expires_at, active, CURRENT_TIMESTAMP
+                      FROM sentinel_bans
+                     WHERE active = 1
+                       AND expires_at IS NOT NULL
+                       AND expires_at <= CURRENT_TIMESTAMP
+                """);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
+            int deleted = 0;
+            try {
+                deleted = db.update(con, """
+                    DELETE FROM sentinel_bans
+                     WHERE active = 1
+                       AND expires_at IS NOT NULL
+                       AND expires_at <= CURRENT_TIMESTAMP
+                """);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+
+            return deleted; // Anzahl verschobener/entfernter Einträge
+        });
     }
 }

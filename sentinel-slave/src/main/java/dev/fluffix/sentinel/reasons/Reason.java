@@ -1,24 +1,69 @@
 package dev.fluffix.sentinel.reasons;
 
-import java.util.Objects;
-
+/**
+ * Repräsentiert einen Grund (Reason) für BAN, MUTE oder REPORT.
+ * Dauer ist in Sekunden angegeben, 0 bedeutet permanent.
+ */
 public class Reason {
-    private String name;          // eindeutiger Name/Key
-    private ReasonType type;      // BAN, MUTE, REPORT
-    private long durationSeconds; // 0 = permanent
 
-    public Reason(String name, ReasonType type, long durationSeconds) {
-        this.name = Objects.requireNonNull(name, "name");
-        this.type = Objects.requireNonNull(type, "type");
-        this.durationSeconds = Math.max(0, durationSeconds);
+    private long id;
+    private String name;
+    private ReasonType type;
+    private long durationSeconds; // DB-Spalte: duration
+
+    public Reason() {
     }
 
-    public Reason() {}
+    public Reason(long id, String name, ReasonType type, long durationSeconds) {
+        this.id = id;
+        this.name = name;
+        this.type = type;
+        this.durationSeconds = durationSeconds;
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public ReasonType getType() { return type; }
-    public void setType(ReasonType type) { this.type = type; }
-    public long getDurationSeconds() { return durationSeconds; }
-    public void setDurationSeconds(long durationSeconds) { this.durationSeconds = Math.max(0, durationSeconds); }
+    public long getId() {
+        return id;
+    }
+
+    public Reason setId(long id) {
+        this.id = id;
+        return this;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Reason setName(String name) {
+        this.name = name;
+        return this;
+    }
+
+    public ReasonType getType() {
+        return type;
+    }
+
+    public Reason setType(ReasonType type) {
+        this.type = type;
+        return this;
+    }
+
+    public long getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public Reason setDurationSeconds(long durationSeconds) {
+        this.durationSeconds = durationSeconds;
+        return this;
+    }
+
+    @Override
+    public String toString() {
+        return "Reason{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", type=" + type +
+                ", durationSeconds=" + durationSeconds +
+                '}';
+    }
 }

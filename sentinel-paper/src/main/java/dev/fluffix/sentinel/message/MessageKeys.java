@@ -10,6 +10,10 @@ public enum MessageKeys {
     RELOAD_DONE,
 
     BAN_KICK,
+    BAN_LIST_USAGE,
+    BAN_LIST_HEADER,
+    BAN_LIST_LINE,
+    BAN_LIST_EMPTY,
 
     BAN_USAGE,
     BAN_SUCCESS,

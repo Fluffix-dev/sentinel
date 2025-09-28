@@ -4,6 +4,9 @@ import dev.fluffix.sentinel.ban.Ban;
 import dev.fluffix.sentinel.ban.BanManager;
 import dev.fluffix.sentinel.message.MessageHandler;
 import dev.fluffix.sentinel.message.MessageKeys;
+import dev.fluffix.sentinel.reasons.Reason;
+import dev.fluffix.sentinel.reasons.ReasonManager;
+import dev.fluffix.sentinel.reasons.ReasonType;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.bukkit.Bukkit;
 import org.bukkit.command.*;
@@ -13,13 +16,15 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class BanCommand implements CommandExecutor {
+public class BanCommand implements CommandExecutor, TabCompleter {
 
     private final BanManager banManager;
+    private final ReasonManager reasonManager;
     private final MessageHandler messages;
 
-    public BanCommand(BanManager banManager, MessageHandler messages) {
+    public BanCommand(BanManager banManager, ReasonManager reasonManager, MessageHandler messages) {
         this.banManager = Objects.requireNonNull(banManager, "banManager");
+        this.reasonManager = Objects.requireNonNull(reasonManager, "reasonManager");
         this.messages = Objects.requireNonNull(messages, "messages");
     }
 
@@ -36,12 +41,59 @@ public class BanCommand implements CommandExecutor {
             return true;
         }
 
+        if (args.length == 0) {
+            sendUsage(player, label);
+            return true;
+        }
+
+        // /ban list ...
+        if (args[0].equalsIgnoreCase("list")) {
+            if (args.length < 2) {
+                messages.sendWithPrefix(player, MessageKeys.BAN_LIST_USAGE.key(),
+                        Placeholder.unparsed("label", label));
+                return true;
+            }
+
+            String target = args[1];
+            if ("all".equalsIgnoreCase(target)) {
+                if (!player.hasPermission("sentinel.banlist")) {
+                    messages.sendWithPrefix(player, MessageKeys.NO_PERMISSION.key());
+                    return true;
+                }
+            } else {
+                if (!player.hasPermission("sentinel.banlist.players")) {
+                    messages.sendWithPrefix(player, MessageKeys.NO_PERMISSION.key());
+                    return true;
+                }
+            }
+
+            handleList(player, target);
+            return true;
+        }
+
+        // /ban <player|uuid> <reasons> [notice]
         if (args.length < 2) {
             sendUsage(player, label);
             return true;
         }
 
         final String target = args[0];
+
+        // 1. Selbst-Ban verhindern
+        if (target.equalsIgnoreCase(player.getName())) {
+            messages.sendWithPrefix(player, MessageKeys.BAN_ERROR.key(),
+                    Placeholder.unparsed("error", "Du kannst dich nicht selbst bannen."));
+            return true;
+        }
+
+        // 2. Bypass-Permission prüfen
+        Player targetPlayer = Bukkit.getPlayerExact(target);
+        if (targetPlayer != null && targetPlayer.hasPermission("sentinel.bypass")) {
+            messages.sendWithPrefix(player, MessageKeys.BAN_ERROR.key(),
+                    Placeholder.unparsed("error", "Dieser Spieler kann nicht gebannt werden."));
+            return true;
+        }
+
         final List<String> reasonsList = Arrays.stream(args[1].split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -54,10 +106,8 @@ public class BanCommand implements CommandExecutor {
         final String operator = player.getName();
 
         try {
-            // Ban (Auto-Dauer aus Reasons)
             Ban ban = banManager.banOfflineAuto(target, operator, reasonsList, notice);
 
-            // Erfolgsmeldung für den Ausführenden
             String reasonsJoined = String.join(", ", reasonsList);
             String durationPretty = (ban.getRemainingSeconds() == 0)
                     ? "permanent"
@@ -71,27 +121,21 @@ public class BanCommand implements CommandExecutor {
                     Placeholder.unparsed("duration", durationPretty),
                     Placeholder.unparsed("notice", notice));
 
-            // === NEU: Wenn Ziel online ist -> sofort kicken mit ban_kick ===
-            Player targetPlayer = null;
-            if (ban.getUniqueId() != null) {
-                targetPlayer = Bukkit.getPlayer(ban.getUniqueId());
+            // Spieler online -> sofort kicken
+            Player onlineTarget = Bukkit.getPlayer(ban.getUniqueId());
+            if (onlineTarget == null) {
+                onlineTarget = Bukkit.getPlayerExact(ban.getName());
             }
-            if (targetPlayer == null) {
-                // Fallback über Namen
-                targetPlayer = Bukkit.getPlayerExact(ban.getName());
-            }
-
-            if (targetPlayer != null && targetPlayer.isOnline()) {
-                // Kick-Message rendern
+            if (onlineTarget != null && onlineTarget.isOnline()) {
                 var kickMsg = messages.render(
                         MessageKeys.BAN_KICK.key(),
-                        Placeholder.unparsed("player", targetPlayer.getName()),
+                        Placeholder.unparsed("player", onlineTarget.getName()),
                         Placeholder.unparsed("reasons", reasonsJoined),
-                        Placeholder.unparsed("duration", (ban.getRemainingSeconds() == 0) ? "permanent" : durationPretty),
+                        Placeholder.unparsed("duration", durationPretty),
                         Placeholder.unparsed("operator", operator),
                         Placeholder.unparsed("notice", notice == null ? "" : notice)
                 );
-                targetPlayer.kick(kickMsg);
+                onlineTarget.kick(kickMsg);
             }
 
         } catch (IllegalStateException | IllegalArgumentException ex) {
@@ -108,9 +152,132 @@ public class BanCommand implements CommandExecutor {
         return true;
     }
 
+    private void handleList(Player player, String target) {
+        try {
+            if ("all".equalsIgnoreCase(target)) {
+                List<Ban> all = banManager.listAll(false).stream()
+                        .limit(25)
+                        .collect(Collectors.toList());
+
+                if (all.isEmpty()) {
+                    messages.sendWithPrefix(player, MessageKeys.BAN_LIST_EMPTY.key(),
+                            Placeholder.unparsed("target", "ALL"));
+                    return;
+                }
+
+                messages.sendWithPrefix(player, MessageKeys.BAN_LIST_HEADER.key(),
+                        Placeholder.unparsed("target", "ALL"));
+
+                for (Ban b : all) {
+                    String dur = b.getRemainingSeconds() == 0 ? "permanent" : b.getRemainingSeconds() + "s";
+                    messages.send(player, MessageKeys.BAN_LIST_LINE.key(),
+                            Placeholder.unparsed("id", String.valueOf(b.getId())),
+                            Placeholder.unparsed("operator", b.getOperator() == null ? "-" : b.getOperator()),
+                            Placeholder.unparsed("reasons", String.join(", ", b.getReasons())),
+                            Placeholder.unparsed("duration", dur),
+                            Placeholder.unparsed("active", String.valueOf(b.isActive())));
+                }
+                return;
+            }
+
+            UUID uuid = tryParseUuid(target);
+            List<Ban> entries;
+            if (uuid != null) {
+                entries = banManager.listFor(uuid);
+            } else {
+                entries = banManager.listAll(false).stream()
+                        .filter(b -> b.getName() != null && b.getName().equalsIgnoreCase(target))
+                        .collect(Collectors.toList());
+            }
+
+            if (entries.isEmpty()) {
+                messages.sendWithPrefix(player, MessageKeys.BAN_LIST_EMPTY.key(),
+                        Placeholder.unparsed("target", target));
+                return;
+            }
+
+            messages.sendWithPrefix(player, MessageKeys.BAN_LIST_HEADER.key(),
+                    Placeholder.unparsed("target", target));
+
+            for (Ban b : entries) {
+                String dur = b.getRemainingSeconds() == 0 ? "permanent" : b.getRemainingSeconds() + "s";
+                messages.send(player, MessageKeys.BAN_LIST_LINE.key(),
+                        Placeholder.unparsed("id", String.valueOf(b.getId())),
+                        Placeholder.unparsed("operator", b.getOperator() == null ? "-" : b.getOperator()),
+                        Placeholder.unparsed("reasons", String.join(", ", b.getReasons())),
+                        Placeholder.unparsed("duration", dur),
+                        Placeholder.unparsed("active", String.valueOf(b.isActive())));
+            }
+
+        } catch (SQLException e) {
+            messages.sendWithPrefix(player,
+                    MessageKeys.BAN_SQL_ERROR.key(),
+                    Placeholder.unparsed("error", e.getMessage()));
+            e.printStackTrace();
+        }
+    }
+
     private void sendUsage(Player player, String label) {
         messages.sendWithPrefix(player,
                 MessageKeys.BAN_USAGE.key(),
                 Placeholder.unparsed("label", label));
+    }
+
+    private static UUID tryParseUuid(String s) {
+        try { return UUID.fromString(s); } catch (Exception ignored) { return null; }
+    }
+
+    /* ---------------- Tab Completion ---------------- */
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (!(sender instanceof Player) || !sender.hasPermission("sentinel.ban")) {
+            return Collections.emptyList();
+        }
+
+        try {
+            if (args.length == 1) {
+                Set<String> suggestions = new LinkedHashSet<>();
+                suggestions.add("list");
+
+                banManager.listAll(false).forEach(b -> {
+                    if (b.getName() != null) suggestions.add(b.getName());
+                });
+                Bukkit.getOnlinePlayers().forEach(p -> suggestions.add(p.getName()));
+
+                return suggestions.stream()
+                        .filter(s -> s.toLowerCase(Locale.ROOT).startsWith(args[0].toLowerCase(Locale.ROOT)))
+                        .sorted(String.CASE_INSENSITIVE_ORDER)
+                        .toList();
+            }
+
+            if (args.length == 2) {
+                if ("list".equalsIgnoreCase(args[0])) {
+                    Set<String> suggestions = new LinkedHashSet<>();
+                    suggestions.add("all");
+
+                    banManager.listAll(false).forEach(b -> {
+                        if (b.getName() != null) suggestions.add(b.getName());
+                    });
+                    Bukkit.getOnlinePlayers().forEach(p -> suggestions.add(p.getName()));
+
+                    return suggestions.stream()
+                            .filter(s -> s.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT)))
+                            .sorted(String.CASE_INSENSITIVE_ORDER)
+                            .toList();
+                } else {
+                    return reasonManager.loadAll(ReasonType.BAN).stream()
+                            .map(Reason::getName)
+                            .filter(r -> r.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT)))
+                            .sorted(String.CASE_INSENSITIVE_ORDER)
+                            .toList();
+                }
+            }
+
+            return Collections.emptyList();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return Collections.emptyList();
+        }
     }
 }

@@ -141,6 +141,12 @@ public class MessageHandler {
                 // Kick-Nachricht beim Login-Bann
                 .add("ban_kick", "<red>Du bist vom Server gebannt.</red><newline><gray>Gründe:</gray> <gold><reasons></gold><newline><gray>Verbleibend:</gray> <white><duration></white><newline><gray>Von:</gray> <white><operator></white><newline><gray><notice></gray>")
 
+                // Ban list
+                .add("ban_list_usage", "<gray>Verwendung:</gray> <white>/<label> list <target|all></white>")
+                .add("ban_list_header", "<aqua>— Bans für <yellow><target></yellow> —</aqua>")
+                .add("ban_list_line", "<gray>#</gray><white><id></white> <yellow><operator></yellow> <gray>[</gray><reasons><gray>]</gray> <white><duration></white> <gray>active=</gray><white><active></white>")
+                .add("ban_list_empty", "<gray>Keine Einträge gefunden für <white><target></white>.</gray>")
+
                 .build(file.getAbsolutePath());
     }
 

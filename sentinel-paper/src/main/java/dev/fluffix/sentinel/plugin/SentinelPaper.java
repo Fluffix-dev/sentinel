@@ -75,53 +75,68 @@ public class SentinelPaper extends JavaPlugin implements Listener {
             return;
         }
 
-        // Manager initialisieren
         try {
             this.sentinelPlayerManager = new SentinelPlayerManager(mySqlManager);
             this.reasonManager = new ReasonManager(mySqlManager);
             this.messageHandler = new MessageHandler(getDataFolder());
             this.banManager = new BanManager(mySqlManager, sentinelPlayerManager, reasonManager);
         } catch (SQLException | IOException e) {
-            getLogger().severe("Initialisierung fehlgeschlagen: " + e.getMessage());
+            PluginLogger.printWithLabel("SENTINEL","Das Plugin koonnte nicht gestartet werden " + e.getMessage(), "RED");
             e.printStackTrace();
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
 
-        // Updater
         String currentVersion = getDescription().getVersion();
         this.updater = new UpdateChecker(this, currentVersion);
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
-        // Updater asynchron starten
         Bukkit.getScheduler().runTaskAsynchronously(this, this::refreshUpdateInfo);
         long intervalTicks = 20L * 60L * 60L * 6; // alle 6 Stunden
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::refreshUpdateInfo, intervalTicks, intervalTicks);
 
-        // Commands registrieren
-        // /reasons – nutzt intern SentinelPaper.getInstance() in deiner bestehenden ReasonsCommand
         PluginCommand reasonsCmd = getCommand("reasons");
         if (reasonsCmd != null) {
             reasonsCmd.setExecutor(new ReasonsCommand());
         } else {
-            getLogger().warning("Command 'reasons' nicht in plugin.yml gefunden.");
+            PluginLogger.printWithLabel("SENTINEL","Fehler beim 'REASON' Command", "RED");
         }
 
-        // /ban – Constructor Injection, damit keine NPEs
         PluginCommand banCmd = getCommand("ban");
         if (banCmd != null) {
-            banCmd.setExecutor(new BanCommand(banManager, messageHandler));
+            banCmd.setExecutor(new BanCommand(banManager,reasonManager, messageHandler));
+            banCmd.setTabCompleter(new BanCommand(banManager,reasonManager,messageHandler));
         } else {
-            getLogger().warning("Command 'ban' nicht in plugin.yml gefunden.");
+            PluginLogger.printWithLabel("SENTINEL","Fehler beim 'BAN' Command", "RED");
         }
+
+        // nach initialisierung von banManager (z.B. in onEnable)
+        long initialDelay = 20L * 5L;        // 5 Sekunden nach Startup
+        long period = 20L * 60L;             // jede 60 Sekunden
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> {
+            try {
+                int moved = banManager.expireDueBans();
+                if (moved > 0) {
+                    PluginLogger.printWithLabel("SENTINEL", "Expire: " + moved + " Ban(s) verschoben/archiviert.", "GREEN");
+                }
+            } catch (SQLException e) {
+                PluginLogger.printWithLabel("SENTINEL", "Fehler beim Archivieren abgelaufener Bans: " + e.getMessage(), "RED");
+                e.printStackTrace();
+            }
+        }, initialDelay, period);
+
+
+        PluginLogger.print("SENTINEL wurde erfolgreich geladen", "BLUE");
+        PluginLogger.print("Version » " + getInstance().getDescription().getVersion(), "BLUE");
+        PluginLogger.print("Author » FluffixYT", "BLUE");
+        PluginLogger.print("GitHub » https://github.com/FluffixYT", "BLUE");
 
         new PlayerListener();
     }
 
     @Override
     public void onDisable() {
-        // Pool sauber schließen (idempotent)
         if (mySqlManager != null) {
             try {
                 mySqlManager.close();
