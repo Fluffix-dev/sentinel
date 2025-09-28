@@ -47,7 +47,6 @@ public class SentinelPaper extends JavaPlugin implements Listener {
     public void onEnable() {
         instance = this;
 
-        // Plugin-Ordner sicherstellen
         if (!getDataFolder().exists() && !getDataFolder().mkdirs()) {
             PluginLogger.printWithLabel("SENTINEL", "Fehler beim Erstellen des Plugin-Ordners", "RED");
             Bukkit.getPluginManager().disablePlugin(this);
@@ -55,7 +54,6 @@ public class SentinelPaper extends JavaPlugin implements Listener {
         }
         File configFile = new File(getDataFolder(), "mysql.json");
 
-        // MySQL initialisieren & prüfen
         try {
             mySqlManager = MySqlManager.fromConfig(configFile);
 
@@ -119,7 +117,6 @@ public class SentinelPaper extends JavaPlugin implements Listener {
             PluginLogger.printWithLabel("SENTINEL","Fehler beim 'UNBAN' Command", "RED");
         }
 
-        // nach initialisierung von banManager (z.B. in onEnable)
         long initialDelay = 20L * 5L;        // 5 Sekunden nach Startup
         long period = 20L * 60L;             // jede 60 Sekunden
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> {

@@ -48,7 +48,6 @@ public class BanCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // /ban list ...
         if (args[0].equalsIgnoreCase("list")) {
             if (args.length < 2) {
                 messages.sendWithPrefix(player, MessageKeys.BAN_LIST_USAGE.key(),
@@ -73,7 +72,6 @@ public class BanCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // /ban <player|uuid> <reasons> [notice]
         if (args.length < 2) {
             sendUsage(player, label);
             return true;
@@ -81,14 +79,12 @@ public class BanCommand implements CommandExecutor, TabCompleter {
 
         final String target = args[0];
 
-        // Self-ban verhindern
         if (target.equalsIgnoreCase(player.getName())) {
             messages.sendWithPrefix(player, MessageKeys.BAN_ERROR.key(),
                     Placeholder.unparsed("error", "Du kannst dich nicht selbst bannen."));
             return true;
         }
 
-        // Bypass prüfen
         Player targetPlayer = Bukkit.getPlayerExact(target);
         if (targetPlayer != null && targetPlayer.hasPermission("sentinel.bypass")) {
             messages.sendWithPrefix(player, MessageKeys.BAN_ERROR.key(),
@@ -123,7 +119,6 @@ public class BanCommand implements CommandExecutor, TabCompleter {
                     Placeholder.unparsed("duration", durationPretty),
                     Placeholder.unparsed("notice", notice));
 
-            // Spieler online -> sofort kicken
             Player onlineTarget = Bukkit.getPlayer(ban.getUniqueId());
             if (onlineTarget == null) {
                 onlineTarget = Bukkit.getPlayerExact(ban.getName());
@@ -156,7 +151,6 @@ public class BanCommand implements CommandExecutor, TabCompleter {
 
     private void handleList(Player player, String target) {
         try {
-            // vorher: abgelaufene Bans verschieben
             try { banManager.expireDueBans(); } catch (SQLException ignore) {}
 
             final Instant now = Instant.now();
@@ -232,7 +226,6 @@ public class BanCommand implements CommandExecutor, TabCompleter {
         if (expiresAt == null) return "permanent";
         long sec = Math.max(0, Duration.between(now, expiresAt).getSeconds());
         return sec + "s";
-        // (Optional: schöner formatieren, z.B. 1h 3m 10s)
     }
 
     private static boolean isActiveNow(Instant now, boolean activeFlag, Instant expiresAt) {
@@ -250,8 +243,6 @@ public class BanCommand implements CommandExecutor, TabCompleter {
     private static UUID tryParseUuid(String s) {
         try { return UUID.fromString(s); } catch (Exception ignored) { return null; }
     }
-
-    /* ---------------- Tab Completion ---------------- */
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {

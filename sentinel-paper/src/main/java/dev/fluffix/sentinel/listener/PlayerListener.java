@@ -35,10 +35,6 @@ public class PlayerListener implements Listener {
        Bukkit.getPluginManager().registerEvents(this, SentinelPaper.getInstance());
     }
 
-    /**
-     * Blockiert gebannte Spieler vor dem Join.
-     * Zeigt Gründe (Liste) und verbleibende Zeit (hh:mm, oder "permanent").
-     */
     @EventHandler
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         UUID uuid = event.getUniqueId();
@@ -46,23 +42,19 @@ public class PlayerListener implements Listener {
         try {
             ban = banManager.getActive(uuid);
         } catch (SQLException e) {
-            // Fallback: bei DB-Fehler niemanden aussperren, aber im Log notieren
             Bukkit.getLogger().warning("[Sentinel] Konnte Ban-Status nicht prüfen: " + e.getMessage());
             return;
         }
         if (ban == null) return;
 
-        // Verbleibende Zeit errechnen (bei permanent = 0)
         long remaining = ban.getRemainingSeconds();
         Instant expiresAt = ban.getExpiresAt();
         if (expiresAt != null) {
             long secs = Duration.between(Instant.now(), expiresAt).getSeconds();
             remaining = Math.max(0, secs);
-            // Wenn abgelaufen, nicht kicken (optional: banManager.expireDueBans() woanders periodisch aufrufen)
             if (remaining == 0) return;
         }
 
-        // Gründe als kommagetrennte Liste
         List<String> reasonList = ban.getReasons();
         String reasonsJoined = (reasonList == null || reasonList.isEmpty()) ? "-" : String.join(", ", reasonList);
 
@@ -70,9 +62,7 @@ public class PlayerListener implements Listener {
         String operator = ban.getOperator() == null ? "-" : ban.getOperator();
         String notice = ban.getNotice() == null ? "" : ban.getNotice();
 
-        // Kick-Nachricht aus messages.json (Key: "ban_kick")
         var kickMsg = messages.render(MessageKeys.BAN_KICK.key(),
-                // verfügbare Platzhalter:
                 Placeholder.unparsed("player", event.getName()),
                 Placeholder.unparsed("reasons", reasonsJoined),
                 Placeholder.unparsed("duration", durationPretty),
@@ -83,15 +73,11 @@ public class PlayerListener implements Listener {
         event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, kickMsg);
     }
 
-    /**
-     * Pflege Spielerdaten nach erfolgreichem Login (Name/IP).
-     */
     @EventHandler
     public void handleJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         String ip = player.getAddress() == null ? "unknown" : player.getAddress().getAddress().getHostAddress();
         try {
-            // deine Methode zum Registrieren/Aktualisieren
             playerManager.registerOrUpdate(player.getUniqueId(), player.getName(), ip);
         } catch (SQLException e) {
             Bukkit.getLogger().warning("[Sentinel] Konnte Spieler nicht registrieren/aktualisieren: " + e.getMessage());
@@ -118,9 +104,6 @@ public class PlayerListener implements Listener {
         }
     }
 
-    /**
-     * 123456 -> "1d 10h 17m" (ohne Sekunden, kompakt)
-     */
     private static String formatDuration(long seconds) {
         long days = seconds / 86400; seconds %= 86400;
         long hours = seconds / 3600; seconds %= 3600;

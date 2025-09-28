@@ -61,7 +61,6 @@ public class UnBanCommand implements CommandExecutor {
         try {
             boolean success = false;
 
-            // Prüfen ob ID ist
             if (isNumeric(target)) {
                 long banId = Long.parseLong(target);
                 success = banManager.unban(banId);
@@ -71,13 +70,11 @@ public class UnBanCommand implements CommandExecutor {
                     return true;
                 }
             } else {
-                // Spielername oder UUID
                 UUID uuid = tryParseUuid(target);
                 if (uuid != null) {
                     int count = banManager.unbanAll(uuid);
                     success = count > 0;
                 } else {
-                    // nach Name suchen
                     List<Ban> bans = banManager.listAll(true);
                     Ban found = bans.stream()
                             .filter(b -> Objects.equals(b.getName(), target))
@@ -93,8 +90,6 @@ public class UnBanCommand implements CommandExecutor {
                     return true;
                 }
             }
-
-            // Kein aktiver Ban gefunden
             messages.sendWithPrefix(player, MessageKeys.UNBAN_NOT_FOUND.key(),
                     Placeholder.unparsed("target", target));
 
