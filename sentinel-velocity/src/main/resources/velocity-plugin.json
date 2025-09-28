@@ -1,0 +1,8 @@
+{
+  "id": "sentinel",
+  "name": "Sentinel",
+  "version": "${pluginVersion}",
+  "main": "dev.fluffix.sentinel.plugin.SentinelVelocity",
+  "author": "FluffixYT",
+  "dependencies": []
+}

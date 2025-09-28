@@ -11,6 +11,7 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/sentinel-paper" />
             <option value="$PROJECT_DIR$/sentinel-slave" />
+            <option value="$PROJECT_DIR$/sentinel-velocity" />
           </set>
         </option>
       </GradleProjectSettings>
