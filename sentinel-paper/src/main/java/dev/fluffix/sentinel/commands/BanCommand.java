@@ -13,6 +13,8 @@ import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -79,14 +81,14 @@ public class BanCommand implements CommandExecutor, TabCompleter {
 
         final String target = args[0];
 
-        // 1. Selbst-Ban verhindern
+        // Self-ban verhindern
         if (target.equalsIgnoreCase(player.getName())) {
             messages.sendWithPrefix(player, MessageKeys.BAN_ERROR.key(),
                     Placeholder.unparsed("error", "Du kannst dich nicht selbst bannen."));
             return true;
         }
 
-        // 2. Bypass-Permission prüfen
+        // Bypass prüfen
         Player targetPlayer = Bukkit.getPlayerExact(target);
         if (targetPlayer != null && targetPlayer.hasPermission("sentinel.bypass")) {
             messages.sendWithPrefix(player, MessageKeys.BAN_ERROR.key(),
@@ -154,6 +156,11 @@ public class BanCommand implements CommandExecutor, TabCompleter {
 
     private void handleList(Player player, String target) {
         try {
+            // vorher: abgelaufene Bans verschieben
+            try { banManager.expireDueBans(); } catch (SQLException ignore) {}
+
+            final Instant now = Instant.now();
+
             if ("all".equalsIgnoreCase(target)) {
                 List<Ban> all = banManager.listAll(false).stream()
                         .limit(25)
@@ -169,13 +176,15 @@ public class BanCommand implements CommandExecutor, TabCompleter {
                         Placeholder.unparsed("target", "ALL"));
 
                 for (Ban b : all) {
-                    String dur = b.getRemainingSeconds() == 0 ? "permanent" : b.getRemainingSeconds() + "s";
+                    String dur = prettyRemaining(now, b.getExpiresAt());
+                    boolean activeNow = isActiveNow(now, b.isActive(), b.getExpiresAt());
                     messages.send(player, MessageKeys.BAN_LIST_LINE.key(),
                             Placeholder.unparsed("id", String.valueOf(b.getId())),
+                            Placeholder.unparsed("player", b.getName() == null ? "-" : b.getName()),
                             Placeholder.unparsed("operator", b.getOperator() == null ? "-" : b.getOperator()),
                             Placeholder.unparsed("reasons", String.join(", ", b.getReasons())),
                             Placeholder.unparsed("duration", dur),
-                            Placeholder.unparsed("active", String.valueOf(b.isActive())));
+                            Placeholder.unparsed("active", String.valueOf(activeNow)));
                 }
                 return;
             }
@@ -200,13 +209,15 @@ public class BanCommand implements CommandExecutor, TabCompleter {
                     Placeholder.unparsed("target", target));
 
             for (Ban b : entries) {
-                String dur = b.getRemainingSeconds() == 0 ? "permanent" : b.getRemainingSeconds() + "s";
+                String dur = prettyRemaining(now, b.getExpiresAt());
+                boolean activeNow = isActiveNow(now, b.isActive(), b.getExpiresAt());
                 messages.send(player, MessageKeys.BAN_LIST_LINE.key(),
                         Placeholder.unparsed("id", String.valueOf(b.getId())),
+                        Placeholder.unparsed("player", b.getName() == null ? "-" : b.getName()),
                         Placeholder.unparsed("operator", b.getOperator() == null ? "-" : b.getOperator()),
                         Placeholder.unparsed("reasons", String.join(", ", b.getReasons())),
                         Placeholder.unparsed("duration", dur),
-                        Placeholder.unparsed("active", String.valueOf(b.isActive())));
+                        Placeholder.unparsed("active", String.valueOf(activeNow)));
             }
 
         } catch (SQLException e) {
@@ -215,6 +226,19 @@ public class BanCommand implements CommandExecutor, TabCompleter {
                     Placeholder.unparsed("error", e.getMessage()));
             e.printStackTrace();
         }
+    }
+
+    private static String prettyRemaining(Instant now, Instant expiresAt) {
+        if (expiresAt == null) return "permanent";
+        long sec = Math.max(0, Duration.between(now, expiresAt).getSeconds());
+        return sec + "s";
+        // (Optional: schöner formatieren, z.B. 1h 3m 10s)
+    }
+
+    private static boolean isActiveNow(Instant now, boolean activeFlag, Instant expiresAt) {
+        if (!activeFlag) return false;
+        if (expiresAt == null) return true; // permanent & aktiv
+        return expiresAt.isAfter(now);
     }
 
     private void sendUsage(Player player, String label) {

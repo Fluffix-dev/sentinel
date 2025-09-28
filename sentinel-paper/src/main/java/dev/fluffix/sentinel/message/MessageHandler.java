@@ -9,6 +9,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -17,16 +18,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * MessageHandler lädt/verwaltet MiniMessage-Templates aus messages.json.
  * - Erstellt bei Bedarf Default-Datei
+ * - Merged fehlende Keys in bestehende Datei
  * - Prefix-Unterstützung (Key "prefix")
  * - Platzhalter via TagResolver/Placeholder
  * - Reload zur Laufzeit
- *
- * Nutzung:
- *   MessageHandler messages = new MessageHandler(getDataFolder());
- *   messages.sendWithPrefix(player, "reasons_added",
- *       Placeholder.unparsed("name","Spam"),
- *       Placeholder.unparsed("type","MUTE"),
- *       Placeholder.unparsed("duration","3600s"));
  */
 public class MessageHandler {
 
@@ -44,7 +39,7 @@ public class MessageHandler {
         this.file = new File(dataFolder, "messages.json");
         this.mm = MiniMessage.miniMessage();
 
-        ensureDefaults();
+        ensureDefaults(); // erstellt oder merged fehlende Keys
         load();
     }
 
@@ -59,19 +54,18 @@ public class MessageHandler {
     /** Gibt MiniMessage-Template als String (roh) zurück. */
     public String raw(String key) {
         String k = key.toLowerCase(Locale.ROOT);
-        // Java 21 kompatibel: kein "_" als Parametername
         return cache.computeIfAbsent(k, ignored -> json.getString(k));
     }
 
     /** Prefix als Component (falls vorhanden, sonst leeres Component). */
     public Component prefix() {
-        String p = raw("prefix");
+        String p = raw(MessageKeys.PREFIX.key());
         return p == null ? Component.empty() : mm.deserialize(p);
     }
 
     /** Prefix als roher MiniMessage-String (z. B. für Logger). */
     public String prefixRaw() {
-        return raw("prefix");
+        return raw(MessageKeys.PREFIX.key());
     }
 
     /** Baut eine Nachricht (ohne Prefix) als Component. */
@@ -116,38 +110,63 @@ public class MessageHandler {
         json.loadFromFile(file);
     }
 
+    /**
+     * Erstellt Defaults oder merged fehlende Keys in bestehende Datei.
+     */
     private void ensureDefaults() throws IOException {
-        if (file.exists()) return;
-
-        new JsonFileBuilder()
-                .add("prefix", "<gray>[<gradient:#00E5FF:#7C4DFF>Sentinel</gradient>]</gray>")
-                .add("no_permission", "<red>Du hast keine Berechtigung.</red>")
+        // 1) Defaults definieren
+        JsonFileBuilder defaults = new JsonFileBuilder()
+                .add(MessageKeys.PREFIX.key(), "<gray>[<gradient:#00E5FF:#7C4DFF>Sentinel</gradient>]</gray>")
+                .add(MessageKeys.NO_PERMISSION.key(), "<red>Du hast keine Berechtigung.</red>")
 
                 // Reasons
-                .add("reasons_added", "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> gespeichert. Dauer: <gold><duration></gold></green>")
-                .add("reasons_removed", "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> entfernt.</green>")
-                .add("reasons_header", "<aqua>--- Reasons<gray> [</gray><type><gray>]</gray> ---</aqua>")
-                .add("reasons_line", "<yellow><name></yellow> <gray>[</gray><type><gray>]</gray> <white><duration></white>")
+                .add(MessageKeys.REASONS_ADDED.key(), "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> gespeichert. Dauer: <gold><duration></gold></green>")
+                .add(MessageKeys.REASONS_REMOVED.key(), "<green>Reason <yellow><name></yellow> <gray>(</gray><type><gray>)</gray> entfernt.</green>")
+                .add(MessageKeys.REASONS_HEADER.key(), "<aqua>--- Reasons<gray> [</gray><type><gray>]</gray> ---</aqua>")
+                .add(MessageKeys.REASONS_LINE.key(), "<yellow><name></yellow> <gray>[</gray><type><gray>]</gray> <white><duration></white>")
 
                 // Reload
-                .add("reload_done", "<green>Konfiguration neu geladen.</green>")
+                .add(MessageKeys.RELOAD_DONE.key(), "<green>Konfiguration neu geladen.</green>")
 
-                // BanCommand
-                .add("ban_usage", "<gray>Verwendung:</gray> <white>/<label> <target> <reason1,reason2,...> [Notiz]</white>")
-                .add("ban_success", "<green><operator></green> hat <yellow><target></yellow> gebannt. Gründe: <gold><reasons></gold> <gray>(</gray><duration><gray>)</gray><#9aa><notice></#9aa>")
-                .add("ban_error", "<red>Konnte Ban nicht ausführen:</red> <white><error></white>")
-                .add("ban_sql_error", "<red>SQL-Fehler:</red> <white><error></white>")
+                // Ban Command
+                .add(MessageKeys.BAN_USAGE.key(), "<gray>Verwendung:</gray> <white>/<label> <target> <reason1,reason2,...> [Notiz]</white>")
+                .add(MessageKeys.BAN_SUCCESS.key(), "<green><operator></green> hat <yellow><target></yellow> gebannt. Gründe: <gold><reasons></gold> <gray>(</gray><duration><gray>)</gray><#9aa><notice></#9aa>")
+                .add(MessageKeys.BAN_ERROR.key(), "<red>Konnte Ban nicht ausführen:</red> <white><error></white>")
+                .add(MessageKeys.BAN_SQL_ERROR.key(), "<red>SQL-Fehler:</red> <white><error></white>")
 
-                // Kick-Nachricht beim Login-Bann
-                .add("ban_kick", "<red>Du bist vom Server gebannt.</red><newline><gray>Gründe:</gray> <gold><reasons></gold><newline><gray>Verbleibend:</gray> <white><duration></white><newline><gray>Von:</gray> <white><operator></white><newline><gray><notice></gray>")
+                // Kick beim Bann
+                .add(MessageKeys.BAN_KICK.key(), "<red>Du bist vom Server gebannt.</red><newline><gray>Gründe:</gray> <gold><reasons></gold><newline><gray>Verbleibend:</gray> <white><duration></white><newline><gray>Von:</gray> <white><operator></white><newline><gray><notice></gray>")
 
-                // Ban list
-                .add("ban_list_usage", "<gray>Verwendung:</gray> <white>/<label> list <target|all></white>")
-                .add("ban_list_header", "<aqua>— Bans für <yellow><target></yellow> —</aqua>")
-                .add("ban_list_line", "<gray>#</gray><white><id></white> <yellow><operator></yellow> <gray>[</gray><reasons><gray>]</gray> <white><duration></white> <gray>active=</gray><white><active></white>")
-                .add("ban_list_empty", "<gray>Keine Einträge gefunden für <white><target></white>.</gray>")
+                // Ban-Liste
+                .add(MessageKeys.BAN_LIST_USAGE.key(), "<gray>Verwendung:</gray> <white>/<label> list <target|all></white>")
+                .add(MessageKeys.BAN_LIST_HEADER.key(), "<aqua>— Bans für <yellow><target></yellow> —</aqua>")
+                .add(MessageKeys.BAN_LIST_LINE.key(), "<yellow><player></yellow> <gray>(</gray><white><operator></white><gray>)</gray> <gray>[</gray><reasons><gray>]</gray> <white><duration></white> <gray>active=</gray><white><active></white>")
+                .add(MessageKeys.BAN_LIST_EMPTY.key(), "<gray>Keine Einträge gefunden für <white><target></white>.</gray>");
 
-                .build(file.getAbsolutePath());
+        // 2) Wenn Datei noch nicht existiert -> komplett schreiben
+        if (!file.exists()) {
+            defaults.build(file.getAbsolutePath());
+            return;
+        }
+
+        // 3) Bestehende Datei laden und fehlende Keys ergänzen
+        JsonFileBuilder current = new JsonFileBuilder();
+        current.loadFromFile(file);
+
+        boolean changed = false;
+        Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> it = defaults.entries();
+        while (it.hasNext()) {
+            Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> e = it.next();
+            String k = e.getKey();
+            String v = (e.getValue() == null ? "" : e.getValue().asText());
+            if (!current.contains(k)) {
+                current.add(k, v);
+                changed = true;
+            }
+        }
+        if (changed) {
+            current.build(file.getAbsolutePath());
+        }
     }
 
     private static TagResolver resolversOrEmpty(TagResolver... resolvers) {
